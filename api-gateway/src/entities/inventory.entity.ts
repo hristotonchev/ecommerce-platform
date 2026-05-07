@@ -1,4 +1,8 @@
-import { Entity, PrimaryGeneratedColumn, Column, UpdateDateColumn, OneToOne, JoinColumn } from 'typeorm';
+import {
+  Entity, PrimaryGeneratedColumn, Column,
+  UpdateDateColumn, OneToOne, JoinColumn
+} from 'typeorm';
+import { Product } from './product.entity';
 
 @Entity('inventory')
 export class Inventory {
@@ -16,4 +20,8 @@ export class Inventory {
 
   @UpdateDateColumn()
   updated_at: Date;
+
+  @OneToOne(() => Product, product => product.inventory)
+  @JoinColumn({ name: 'product_id' })
+  product: Product;
 }

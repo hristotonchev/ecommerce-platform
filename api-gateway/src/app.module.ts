@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from './auth/auth.module';
+import { ProductsModule } from './products/products.module';
 import { User } from './entities/user.entity';
 import { Category } from './entities/category.entity';
 import { Product } from './entities/product.entity';
@@ -28,6 +29,7 @@ import { OrderItem } from './entities/order-item.entity';
       inject: [ConfigService],
     }),
     AuthModule,
+    ProductsModule,
   ],
 })
 export class AppModule {}

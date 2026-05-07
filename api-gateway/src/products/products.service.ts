@@ -1,4 +1,99 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Product } from '../entities/product.entity';
+import { Inventory } from '../entities/inventory.entity';
+import { CreateProductDto } from './dto/create-product.dto';
+import { UpdateProductDto } from './dto/update-product.dto';
+import { ProductQueryDto } from './dto/product-query.dto';
 
 @Injectable()
-export class ProductsService {}
+export class ProductsService {
+  constructor(
+    @InjectRepository(Product)
+    private productRepository: Repository<Product>,
+    @InjectRepository(Inventory)
+    private inventoryRepository: Repository<Inventory>,
+  ) {}
+
+  async findAll(query: ProductQueryDto) {
+    const { page = 1, limit = 10, search, category_id, is_active } = query;
+
+    const qb = this.productRepository
+      .createQueryBuilder('product')
+      .leftJoinAndSelect('product.category', 'category')
+      .leftJoinAndSelect('product.inventory', 'inventory')
+      .where('product.deleted_at IS NULL');
+
+    if (search) {
+      qb.andWhere(
+        '(product.name ILIKE :search OR product.description ILIKE :search)',
+        { search: `%${search}%` },
+      );
+    }
+
+    if (category_id) {
+      qb.andWhere('product.category_id = :category_id', { category_id });
+    }
+
+    if (is_active !== undefined) {
+      qb.andWhere('product.is_active = :is_active', { is_active });
+    }
+
+    const total = await qb.getCount();
+    const items = await qb
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getMany();
+
+    return {
+      data: items,
+      meta: { total, page, limit, last_page: Math.ceil(total / limit) },
+    };
+  }
+
+  async findOne(id: number): Promise<Product> {
+    const product = await this.productRepository.findOne({
+      where: { id },
+      relations: ['category', 'inventory'],
+    });
+    if (!product) throw new NotFoundException(`Product #${id} not found`);
+    return product;
+  }
+
+  async create(dto: CreateProductDto): Promise<Product> {
+    const slug = dto.name.toLowerCase().replace(/\s+/g, '-') + '-' + Date.now();
+    const product = this.productRepository.create({ ...dto, slug });
+    const saved = await this.productRepository.save(product);
+
+    await this.inventoryRepository.save(
+      this.inventoryRepository.create({
+        product_id: saved.id,
+        quantity: dto.quantity,
+        reserved: 0,
+      }),
+    );
+
+    return this.findOne(saved.id);
+  }
+
+  async update(id: number, dto: UpdateProductDto): Promise<Product> {
+    await this.findOne(id);
+
+    if (dto.quantity !== undefined) {
+      await this.inventoryRepository.update(
+        { product_id: id },
+        { quantity: dto.quantity },
+      );
+    }
+
+    const { quantity, ...productData } = dto;
+    await this.productRepository.update(id, productData);
+    return this.findOne(id);
+  }
+
+  async remove(id: number): Promise<void> {
+    await this.findOne(id);
+    await this.productRepository.softDelete(id);
+  }
+}
