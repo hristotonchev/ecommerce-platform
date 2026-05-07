@@ -1,0 +1,84 @@
+# ------------------------------------------------------
+# THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
+# ------------------------------------------------------
+
+type CategoryType {
+  id: Int!
+  name: String!
+  slug: String!
+}
+
+input CreateProductInput {
+  category_id: Int!
+  description: String!
+  name: String!
+  price: Float!
+  quantity: Int!
+}
+
+"""
+A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date-time format.
+"""
+scalar DateTime
+
+type InventoryType {
+  quantity: Int!
+  reserved: Int!
+}
+
+type Mutation {
+  createProduct(input: CreateProductInput!): ProductType!
+  deleteProduct(id: Int!): ProductType!
+}
+
+type OrderItemType {
+  id: Int!
+  product_id: Int!
+  quantity: Int!
+  subtotal: Float!
+  unit_price: Float!
+}
+
+type OrderType {
+  created_at: DateTime!
+  id: Int!
+  items: [OrderItemType!]!
+  notes: String
+  status: String!
+  total_amount: Float!
+}
+
+type ProductType {
+  category: CategoryType
+  created_at: DateTime!
+  description: String
+  id: Int!
+  image_path: String
+  inventory: InventoryType
+  is_active: Boolean!
+  name: String!
+  price: Float!
+  slug: String!
+}
+
+input ProductsFilterInput {
+  category_id: Int
+  limit: Int = 10
+  page: Int = 1
+  search: String
+}
+
+type ProductsResult {
+  data: [ProductType!]!
+  last_page: Int!
+  page: Int!
+  total: Int!
+}
+
+type Query {
+  allOrders: [OrderType!]!
+  myOrders: [OrderType!]!
+  order(id: Int!): OrderType
+  product(id: Int!): ProductType
+  products(filter: ProductsFilterInput): ProductsResult!
+}
