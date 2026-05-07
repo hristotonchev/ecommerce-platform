@@ -6,107 +6,116 @@ Hybrid e-commerce platform built with **Nest.js** (API Gateway) and **Laravel** 
 
 ```
                     Internet
-                       ↓
-              [Nginx :80]
-              /           \
-[Nest.js :3000]      [Laravel :8000]
- API Gateway          Admin Panel
-      |                    |
-      └──────┬─────────────┘
-             |
-      [PostgreSQL]
-      [Redis Cache]
+                        |
+               [Nginx :80]
+               /           \
+ [Nest.js :3000]      [Laravel :8000]
+  API Gateway          Admin Panel
+       |                    |
+       +--------+-----------+
+                |
+         [PostgreSQL]
+         [Redis Cache]
 ```
 
-**Nest.js** handles the public API — authentication, product browsing, order placement, WebSocket connections.
+Nest.js handles the public API — authentication, product browsing, order placement, WebSocket connections.
 
-**Laravel** handles internal administration — product and category management, order processing, sales reports.
+Laravel handles internal administration — product and category management, order processing, sales reports.
 
 Both services share the same PostgreSQL database. When Laravel updates a product, it fires a webhook to Nest.js to invalidate the Redis cache. A single JWT secret is shared between both services.
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| API Gateway | Nest.js + TypeScript |
-| Admin Panel | Laravel 13 + Blade |
-| Database | PostgreSQL 15 |
-| Cache | Redis 7 |
-| Auth | JWT (shared secret) |
-| Real-time | Socket.io WebSockets |
-| Container | Docker + Nginx |
+| Layer      | Technology             |
+|------------|------------------------|
+| API        | Nest.js + TypeScript   |
+| Admin      | Laravel 13 + Blade     |
+| Database   | PostgreSQL 15          |
+| Cache      | Redis 7                |
+| Auth       | JWT (shared secret)    |
+| Real-time  | Socket.io WebSockets   |
+| Container  | Docker + Nginx         |
 
 ## Quick Start
 
-**Prerequisites:** Docker, Node.js 22, PHP 8.4, Composer
+Prerequisites: Docker, Node.js 22, PHP 8.4, Composer
 
 ```bash
-# 1. Clone and start infrastructure
+# 1. Start infrastructure
 git clone <repo>
 cd ecommerce-platform
 docker-compose up -d postgres redis
 
-# 2. Start Nest.js API
+# 2. API Gateway
 cd api-gateway
 npm install
 cp .env.example .env
 npm run start:dev
 
-# 3. Seed database
+# 3. Seed database (in a new terminal)
+cd api-gateway
 npm run seed
 
-# 4. Start Laravel Admin
-cd ../admin-service
+# 4. Admin Panel
+cd admin-service
 composer install
 cp .env.example .env
 php artisan key:generate
 php artisan serve --port=8000
 ```
 
+## Default Credentials
+
+| User          | Email                 | Password    | Role     |
+|---------------|-----------------------|-------------|----------|
+| Admin         | admin@shop.com        | password123 | admin    |
+| Customer      | maria@example.com     | password123 | customer |
+| Customer      | georgi@example.com    | password123 | customer |
+
+Admin login works in both the Nest.js API and the Laravel admin panel without any extra steps.
+
 ## Services
 
-| Service | URL | Credentials |
-|---------|-----|-------------|
-| Nest.js API | http://localhost:3000 | JWT token |
-| Laravel Admin | http://localhost:8000 | laravel-admin@test.com / password123 |
-| PostgreSQL | localhost:5432 | ecommerce_user / secret |
-| Redis | localhost:6379 | — |
+| Service        | URL                       |
+|----------------|---------------------------|
+| Nest.js API    | http://localhost:3000     |
+| Laravel Admin  | http://localhost:8000     |
+| PostgreSQL     | localhost:5432            |
+| Redis          | localhost:6379            |
 
 ## API Endpoints
 
-### Authentication
+### Auth
 ```
-POST /api/auth/register   — Register new user
-POST /api/auth/login      — Login, returns JWT token
-```
-
-### Products (public)
-```
-GET    /api/products        — List with pagination & filters
-GET    /api/products/:id    — Single product
-POST   /api/products        — Create (Admin only)
-PUT    /api/products/:id    — Update (Admin only)
-DELETE /api/products/:id    — Soft delete (Admin only)
+POST /api/auth/register
+POST /api/auth/login
 ```
 
-### Orders (authenticated)
+### Products
 ```
-POST /api/orders              — Place order (checks inventory)
-GET  /api/orders/my-orders    — User's orders
-GET  /api/orders/:id          — Single order
-GET  /api/orders              — All orders (Admin only)
-PUT  /api/orders/:id/status   — Update status (Admin only)
+GET    /api/products           public, paginated, filterable
+GET    /api/products/:id       public
+POST   /api/products           admin only
+PUT    /api/products/:id       admin only
+DELETE /api/products/:id       admin only, soft delete
 ```
 
-### Internal (Laravel → Nest.js, API Key protected)
+### Orders
 ```
-POST /api/internal/cache/invalidate    — Invalidate product cache
-POST /api/internal/orders/:id/status  — Sync order status
+POST /api/orders               authenticated, checks inventory
+GET  /api/orders/my-orders     authenticated
+GET  /api/orders/:id           authenticated
+GET  /api/orders               admin only
+PUT  /api/orders/:id/status    admin only
+```
+
+### Internal (Laravel to Nest.js)
+```
+POST /api/internal/cache/invalidate    X-API-Key required
+POST /api/internal/orders/:id/status  X-API-Key required
 ```
 
 ## WebSockets
-
-Connect to `ws://localhost:3000/orders` with JWT token:
 
 ```javascript
 import { io } from 'socket.io-client';
@@ -115,119 +124,95 @@ const socket = io('http://localhost:3000/orders', {
   auth: { token: 'your-jwt-token' }
 });
 
-socket.on('connected', (data) => console.log(data));
+socket.on('connected',     (data) => console.log(data));
 socket.on('order_updated', (data) => console.log(data));
 socket.on('order_created', (data) => console.log(data));
 ```
 
-Events are emitted on order placement and status changes in real time.
+Events are emitted when an order is placed or its status changes.
 
 ## Admin Panel
 
-Available at `http://localhost:8000/admin`:
+Available at http://localhost:8000/admin
 
-- **Dashboard** — revenue, order counts, recent activity
-- **Products** — CRUD with image upload, soft deletes, category assignment
-- **Categories** — nested category management with parent/child support
-- **Orders** — status management, order details, webhook sync to Nest.js
-- **Users** — customer list and order history
-- **Reports** — daily/monthly sales analytics, CSV export
+- Dashboard — revenue, order counts, recent activity
+- Products — CRUD with image upload and soft deletes
+- Categories — nested with parent/child support
+- Orders — status updates, synced to Nest.js via webhook
+- Users — customer list and order history
+- Reports — daily/monthly sales, CSV export
 
 ## Testing
 
 ```bash
-# Nest.js unit tests (14 passing)
+# Nest.js — 14 unit tests
 cd api-gateway
 npm run test
 
-# Laravel feature tests (21 passing)
+# Laravel — 21 feature tests
 cd admin-service
 DB_HOST=127.0.0.1 DB_PORT=5432 DB_DATABASE=ecommerce \
 DB_USERNAME=ecommerce_user DB_PASSWORD=secret \
 php artisan test
 ```
 
-## Database Seeding
-
-```bash
-cd api-gateway
-npm run seed
-```
-
-Creates default users, categories, and products for development.
-
-Default credentials after seeding:
-- Admin: `admin@ecommerce.com` / `password123`
-- Customer: `john@example.com` / `password123`
-
 ## Key Design Decisions
 
-**Shared database over microservice isolation**
-For this scale, sharing PostgreSQL between services avoids the complexity of distributed transactions while still allowing independent deployment. The two services communicate via webhooks for cache invalidation.
+**Shared database** — Both services read and write to the same PostgreSQL instance. This avoids distributed transaction complexity while still allowing independent deployment.
 
-**Redis caching with event-driven invalidation**
-Product reads are cached in Redis with a 5-minute TTL. When Laravel admin updates a product, it fires a POST to Nest.js `/api/internal/cache/invalidate`, ensuring the mobile API always returns fresh data without waiting for TTL expiry.
+**Cache invalidation via webhooks** — When Laravel updates a product, it calls Nest.js `/api/internal/cache/invalidate`. This keeps Redis fresh without waiting for TTL expiry.
 
-**JWT shared secret**
-A single `JWT_SECRET` environment variable is read by both services. Tokens issued by Nest.js are valid in Laravel's `/api/*` routes, enabling a unified authentication experience.
+**Shared JWT secret** — One `JWT_SECRET` in both `.env` files. Tokens issued by Nest.js are valid in Laravel API routes and vice versa.
 
-**Optimistic inventory reservation**
-When an order is placed, inventory is `reserved` (not deducted) until the order is shipped. Cancellations release the reservation. This prevents overselling without requiring pessimistic locking on every read.
+**Inventory reservation** — On order placement, stock is `reserved` not deducted. Deduction happens on ship. Cancellations release the reservation.
 
-**Soft deletes on products**
-Products are never hard-deleted. This preserves order history integrity — an order item always has a valid product reference even after the product is removed from the catalog.
+**Soft deletes** — Products are never hard-deleted, preserving order history integrity.
 
-**CQRS-inspired separation**
-Write operations (order placement, product updates) go through Nest.js with full validation and transaction support. Read operations use Redis cache first, falling back to the read replica pattern when needed.
+**bcrypt compatibility** — The seeder generates PHP-compatible password hashes by replacing the `$2b$` prefix (Node.js) with `$2y$` (PHP). Both are identical algorithmically.
 
 ## Integration Flow
 
 ```
-Product Update Flow:
-Admin → PUT /admin/products/:id (Laravel)
-      → UPDATE products SET ... (PostgreSQL)
-      → POST /api/internal/cache/invalidate (Nest.js)
-      → DELETE product_N from Redis
-      → Next GET /api/products/:id fetches fresh from DB
+Product update:
+Admin PUT /admin/products/:id  (Laravel)
+  -> UPDATE products (PostgreSQL)
+  -> POST /api/internal/cache/invalidate (Nest.js)
+  -> Redis cache cleared
+  -> Next GET returns fresh data
 
-Order Status Flow:
-Admin → PUT /admin/orders/:id (Laravel)
-      → UPDATE orders SET status=... (PostgreSQL)
-      → POST /api/internal/orders/:id/status (Nest.js)
-      → WebSocket push to user's mobile app
+Order status update:
+Admin PUT /admin/orders/:id  (Laravel)
+  -> UPDATE orders (PostgreSQL)
+  -> POST /api/internal/orders/:id/status (Nest.js)
+  -> WebSocket push to customer
 ```
 
-## Postman Collection
+## Postman
 
-Import both files from the `docs/` folder into Postman:
-- `ecommerce-api.postman_collection.json`
-- `ecommerce-local.postman_environment.json`
+Import from the docs/ folder:
+- ecommerce-api.postman_collection.json
+- ecommerce-local.postman_environment.json
 
-Select the **Ecommerce Local** environment, then run **Auth → Login (Admin)** first. The JWT token is saved automatically to all subsequent requests.
+Select the Ecommerce Local environment. Run Auth -> Login (Admin) first — token saves automatically.
 
 ## Project Structure
 
 ```
 ecommerce-platform/
-├── api-gateway/          # Nest.js — public API
+├── api-gateway/              Nest.js public API
 │   ├── src/
-│   │   ├── auth/         # JWT auth, guards, decorators
-│   │   ├── products/     # Product CRUD with caching
-│   │   ├── orders/       # Order processing with transactions
-│   │   ├── internal/     # Internal webhooks from Laravel
-│   │   ├── websockets/   # Real-time order updates
-│   │   ├── entities/     # TypeORM entities
-│   │   └── database/     # Seeders
-│   └── docs/             # Postman collection
-├── admin-service/        # Laravel — admin panel
-│   ├── app/
-│   │   ├── Http/
-│   │   │   ├── Controllers/Admin/  # Dashboard, Products, Orders...
-│   │   │   └── Middleware/         # AdminMiddleware, JwtMiddleware
-│   │   └── Models/
-│   ├── resources/views/admin/      # Blade templates
-│   └── tests/Feature/Admin/        # Feature tests
-├── nginx/
-│   └── nginx.conf        # Reverse proxy config
-└── docker-compose.yml    # Full stack definition
+│   │   ├── auth/             JWT, guards, decorators
+│   │   ├── products/         CRUD with Redis cache
+│   │   ├── orders/           Transactions, inventory
+│   │   ├── internal/         Webhook endpoints
+│   │   ├── websockets/       Real-time gateway
+│   │   ├── entities/         TypeORM entities
+│   │   └── database/         Seeders
+│   └── docs/                 Postman collection
+├── admin-service/            Laravel admin panel
+│   ├── app/Http/Controllers/Admin/
+│   ├── resources/views/admin/
+│   └── tests/Feature/Admin/
+├── nginx/nginx.conf
+└── docker-compose.yml
 ```

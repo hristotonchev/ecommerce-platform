@@ -13,20 +13,23 @@ const AppDataSource = new DataSource({
 
 async function seed() {
   await AppDataSource.initialize();
-  console.log('🌱 Starting seed...');
+  console.log('Seeding database...');
 
-  // Users
-  const hashedPassword = await bcrypt.hash('password123', 12);
+  const password = await bcrypt.hash('password123', 12);
+
+  // PHP bcrypt uses $2y$ prefix, Node.js uses $2b$
+  // They are identical algorithmically - just swap the prefix
+  const phpPassword = password.replace('$2b$', '$2y$');
 
   await AppDataSource.query(`
     INSERT INTO users (name, email, password, role, created_at)
     VALUES
-      ('Admin User', 'admin@ecommerce.com', '${hashedPassword}', 'admin', NOW()),
-      ('John Customer', 'john@example.com', '${hashedPassword}', 'customer', NOW()),
-      ('Jane Customer', 'jane@example.com', '${hashedPassword}', 'customer', NOW())
+      ('Admin', 'admin@shop.com', '${phpPassword}', 'admin', NOW()),
+      ('Maria Petrova', 'maria@example.com', '${password}', 'customer', NOW()),
+      ('Georgi Ivanov', 'georgi@example.com', '${password}', 'customer', NOW())
     ON CONFLICT (email) DO NOTHING;
   `);
-  console.log('✅ Users seeded');
+  console.log('Users done');
 
   // Categories
   await AppDataSource.query(`
@@ -34,68 +37,89 @@ async function seed() {
     VALUES
       ('Electronics', 'electronics', NOW()),
       ('Clothing', 'clothing', NOW()),
-      ('Books', 'books', NOW()),
-      ('Sports', 'sports', NOW())
+      ('Books', 'books', NOW())
     ON CONFLICT (slug) DO NOTHING;
   `);
 
-  const electronics = await AppDataSource.query(
+  const [elec] = await AppDataSource.query(
     `SELECT id FROM categories WHERE slug = 'electronics'`
   );
 
   await AppDataSource.query(`
     INSERT INTO categories (name, slug, parent_id, created_at)
     VALUES
-      ('Phones', 'phones', ${electronics[0].id}, NOW()),
-      ('Laptops', 'laptops', ${electronics[0].id}, NOW())
+      ('Phones', 'phones', ${elec.id}, NOW()),
+      ('Laptops', 'laptops', ${elec.id}, NOW())
     ON CONFLICT (slug) DO NOTHING;
   `);
-  console.log('✅ Categories seeded');
+  console.log('Categories done');
 
   // Products
-  const phones = await AppDataSource.query(
-    `SELECT id FROM categories WHERE slug = 'phones'`
-  );
-  const laptops = await AppDataSource.query(
-    `SELECT id FROM categories WHERE slug = 'laptops'`
-  );
+  const [phones]  = await AppDataSource.query(`SELECT id FROM categories WHERE slug='phones'`);
+  const [laptops] = await AppDataSource.query(`SELECT id FROM categories WHERE slug='laptops'`);
+  const [books]   = await AppDataSource.query(`SELECT id FROM categories WHERE slug='books'`);
 
   const products = [
-    { name: 'iPhone 15 Pro', price: 999.99, category_id: phones[0].id, qty: 50 },
-    { name: 'Samsung Galaxy S24', price: 849.99, category_id: phones[0].id, qty: 30 },
-    { name: 'MacBook Pro 16"', price: 2499.99, category_id: laptops[0].id, qty: 20 },
-    { name: 'Dell XPS 15', price: 1799.99, category_id: laptops[0].id, qty: 15 },
-    { name: 'AirPods Pro', price: 249.99, category_id: electronics[0].id, qty: 100 },
+    { name: 'iPhone 15',   price: 999.99,  cat: phones.id,  qty: 50,  desc: 'Latest Apple smartphone' },
+    { name: 'Samsung S24', price: 849.99,  cat: phones.id,  qty: 30,  desc: 'Flagship Android phone' },
+    { name: 'MacBook Pro', price: 2499.99, cat: laptops.id, qty: 15,  desc: 'Professional laptop' },
+    { name: 'Dell XPS 15', price: 1799.99, cat: laptops.id, qty: 10,  desc: 'Premium Windows laptop' },
+    { name: 'Clean Code',  price: 34.99,   cat: books.id,   qty: 100, desc: 'Robert C. Martin' },
   ];
 
+  const productIds: number[] = [];
+
   for (const p of products) {
+    const slug = p.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + Date.now();
     const result = await AppDataSource.query(`
       INSERT INTO products (name, slug, description, price, category_id, is_active, created_at)
-      VALUES (
-        '${p.name}',
-        '${p.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${Date.now()}',
-        'High quality ${p.name}',
-        ${p.price},
-        ${p.category_id},
-        true,
-        NOW()
-      )
-      ON CONFLICT (slug) DO NOTHING
+      VALUES ('${p.name}', '${slug}', '${p.desc}', ${p.price}, ${p.cat}, true, NOW())
       RETURNING id;
     `);
 
-    if (result.length > 0) {
-      await AppDataSource.query(`
-        INSERT INTO inventory (product_id, quantity, reserved, updated_at)
-        VALUES (${result[0].id}, ${p.qty}, 0, NOW())
-        ON CONFLICT (product_id) DO NOTHING;
-      `);
-    }
-  }
-  console.log('✅ Products seeded');
+    const productId = result[0].id;
+    productIds.push(productId);
 
+    await AppDataSource.query(`
+      INSERT INTO inventory (product_id, quantity, reserved, updated_at)
+      VALUES (${productId}, ${p.qty}, 0, NOW())
+      ON CONFLICT (product_id) DO NOTHING;
+    `);
+  }
+  console.log('Products done');
+
+  // Orders
+  const [customer] = await AppDataSource.query(
+    `SELECT id FROM users WHERE email = 'maria@example.com'`
+  );
+
+  const [order1] = await AppDataSource.query(`
+    INSERT INTO orders (user_id, status, total_amount, notes, created_at, updated_at)
+    VALUES (${customer.id}, 'confirmed', 999.99, 'Please deliver in the morning', NOW(), NOW())
+    RETURNING id;
+  `);
+
+  await AppDataSource.query(`
+    INSERT INTO order_items (order_id, product_id, quantity, unit_price, subtotal)
+    VALUES (${order1.id}, ${productIds[0]}, 1, 999.99, 999.99);
+  `);
+
+  const [order2] = await AppDataSource.query(`
+    INSERT INTO orders (user_id, status, total_amount, notes, created_at, updated_at)
+    VALUES (${customer.id}, 'shipped', 2534.98, NULL, NOW(), NOW())
+    RETURNING id;
+  `);
+
+  await AppDataSource.query(`
+    INSERT INTO order_items (order_id, product_id, quantity, unit_price, subtotal)
+    VALUES
+      (${order2.id}, ${productIds[2]}, 1, 2499.99, 2499.99),
+      (${order2.id}, ${productIds[4]}, 1, 34.99, 34.99);
+  `);
+
+  console.log('Orders done');
   await AppDataSource.destroy();
-  console.log('🎉 Seed complete!');
+  console.log('Seed complete!');
 }
 
 seed().catch(console.error);
