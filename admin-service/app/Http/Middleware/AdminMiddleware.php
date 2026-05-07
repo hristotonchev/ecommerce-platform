@@ -10,11 +10,14 @@ class AdminMiddleware
 {
     public function handle(Request $request, Closure $next)
     {
-        if (!Auth::check() || Auth::user()->role !== 'admin') {
-            if ($request->expectsJson()) {
-                return response()->json(['message' => 'Forbidden'], 403);
-            }
+        if (!Auth::check()) {
             return redirect()->route('login');
+        }
+
+        if (Auth::user()->role !== 'admin') {
+            Auth::logout();
+            return redirect()->route('login')
+                ->with('error', 'Access denied. Admin account required.');
         }
 
         return $next($request);
