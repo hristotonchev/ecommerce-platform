@@ -1,20 +1,33 @@
 <?php
 
-use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Admin\DashboardController;
+use App\Http\Controllers\Admin\ProductController;
+use App\Http\Controllers\Admin\CategoryController;
+use App\Http\Controllers\Admin\OrderController;
+use App\Http\Controllers\Admin\UserController;
 
 Route::get('/', function () {
-    return view('welcome');
+    return redirect()->route('admin.dashboard');
 });
 
-Route::get('/dashboard', function () {
-    return view('dashboard');
-})->middleware(['auth', 'verified'])->name('dashboard');
-
-Route::middleware('auth')->group(function () {
-    Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
-    Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
-    Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
-});
-
+// Auth routes
 require __DIR__.'/auth.php';
+
+// Admin routes
+Route::prefix('admin')
+    ->name('admin.')
+    ->middleware(['auth', 'admin'])
+    ->group(function () {
+
+        Route::get('/dashboard', [DashboardController::class, 'index'])
+            ->name('dashboard');
+
+        Route::resource('products', ProductController::class);
+        Route::post('products/{product}/restore', [ProductController::class, 'restore'])
+            ->name('products.restore');
+
+        Route::resource('categories', CategoryController::class);
+        Route::resource('orders', OrderController::class)->only(['index', 'show', 'update']);
+        Route::resource('users', UserController::class)->only(['index', 'show', 'destroy']);
+    });
