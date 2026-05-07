@@ -1,0 +1,58 @@
+name: CD Pipeline
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    needs: []
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+
+      # Build Nest.js
+      - name: Build Nest.js
+        working-directory: api-gateway
+        run: |
+          npm ci
+          npm run build
+
+      # Build Laravel assets
+      - name: Build Laravel assets
+        working-directory: admin-service
+        run: |
+          composer install --no-dev --optimize-autoloader
+          npm ci
+          npm run build
+
+      # Docker build & tag
+      - name: Build Docker images
+        run: |
+          docker build -t ecommerce-api:latest \
+            -t ecommerce-api:${{ github.sha }} \
+            ./api-gateway
+          docker build -t ecommerce-admin:latest \
+            -t ecommerce-admin:${{ github.sha }} \
+            ./admin-service
+
+      # Notify on success
+      - name: Deployment summary
+        run: |
+          echo "Deployment complete!"
+          echo "API image: ecommerce-api:${{ github.sha }}"
+          echo "Admin image: ecommerce-admin:${{ github.sha }}"
