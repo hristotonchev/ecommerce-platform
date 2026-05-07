@@ -11,6 +11,7 @@ import { OrdersModule } from './orders/orders.module';
 import { InternalModule } from './internal/internal.module';
 import { WebsocketsModule } from './websockets/websockets.module';
 import { GraphqlModule } from './graphql/graphql.module';
+import { SearchModule } from './search/search.module';
 import { User } from './entities/user.entity';
 import { Category } from './entities/category.entity';
 import { Product } from './entities/product.entity';
@@ -24,11 +25,7 @@ import { OrderItem } from './entities/order-item.entity';
     CacheModule.registerAsync({
       isGlobal: true,
       imports: [ConfigModule],
-      useFactory: () => ({
-        store: 'memory',
-        ttl: 300,
-        max: 100,
-      }),
+      useFactory: () => ({ store: 'memory', ttl: 300, max: 100 }),
       inject: [ConfigService],
     }),
     GraphQLModule.forRoot<ApolloDriverConfig>({
@@ -59,6 +56,7 @@ import { OrderItem } from './entities/order-item.entity';
     InternalModule,
     WebsocketsModule,
     GraphqlModule,
+    SearchModule,
   ],
 })
 export class AppModule {}
