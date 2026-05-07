@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Ecommerce Platform API",
-    "description": "API collection for the Ecommerce Platform",
+    "description": "Complete API collection for the Ecommerce Platform - Nest.js API Gateway + Internal endpoints",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -30,7 +30,7 @@
                   "const response = pm.response.json();",
                   "if (response.access_token) {",
                   "  pm.environment.set('token', response.access_token);",
-                  "  console.log('Token saved: ' + response.access_token);",
+                  "  console.log('Token saved!');",
                   "}"
                 ],
                 "type": "text/javascript"
@@ -60,6 +60,20 @@
           }
         },
         {
+          "name": "Get All Products (with search)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/products?search=iPhone"
+          }
+        },
+        {
+          "name": "Get All Products (by category)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/products?category_id=1"
+          }
+        },
+        {
           "name": "Get Product by ID",
           "request": {
             "method": "GET",
@@ -67,14 +81,7 @@
           }
         },
         {
-          "name": "Search Products",
-          "request": {
-            "method": "GET",
-            "url": "{{base_url}}/api/products?search=iPhone"
-          }
-        },
-        {
-          "name": "Create Product (Admin)",
+          "name": "Create Product (Admin only)",
           "request": {
             "method": "POST",
             "header": [
@@ -84,12 +91,12 @@
             "url": "{{base_url}}/api/products",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"MacBook Pro\",\n  \"description\": \"Apple MacBook Pro 16 inch\",\n  \"price\": 2499.99,\n  \"category_id\": 1,\n  \"quantity\": 20\n}"
+              "raw": "{\n  \"name\": \"MacBook Pro\",\n  \"description\": \"Apple MacBook Pro 16 inch M3\",\n  \"price\": 2499.99,\n  \"category_id\": 1,\n  \"quantity\": 20\n}"
             }
           }
         },
         {
-          "name": "Update Product (Admin)",
+          "name": "Update Product (Admin only)",
           "request": {
             "method": "PUT",
             "header": [
@@ -104,7 +111,7 @@
           }
         },
         {
-          "name": "Delete Product (Admin)",
+          "name": "Delete Product (Admin only)",
           "request": {
             "method": "DELETE",
             "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
@@ -148,7 +155,7 @@
           }
         },
         {
-          "name": "Get All Orders (Admin)",
+          "name": "Get All Orders (Admin only)",
           "request": {
             "method": "GET",
             "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
@@ -156,7 +163,7 @@
           }
         },
         {
-          "name": "Update Order Status (Admin)",
+          "name": "Update Order Status (Admin only)",
           "request": {
             "method": "PUT",
             "header": [
@@ -164,6 +171,54 @@
               {"key": "Authorization", "value": "Bearer {{token}}"}
             ],
             "url": "{{base_url}}/api/orders/1/status",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"shipped\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Internal (Laravel → Nest.js)",
+      "description": "Internal endpoints called by Laravel Admin. Protected by X-API-Key header. NOT for public use.",
+      "item": [
+        {
+          "name": "Invalidate Product Cache",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "X-API-Key", "value": "{{api_key}}"}
+            ],
+            "url": "{{base_url}}/api/internal/cache/invalidate",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"product\",\n  \"id\": 2\n}"
+            }
+          }
+        },
+        {
+          "name": "Invalidate Product Cache (no key - should 401)",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "url": "{{base_url}}/api/internal/cache/invalidate",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"product\",\n  \"id\": 2\n}"
+            }
+          }
+        },
+        {
+          "name": "Update Order Status (Internal)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "X-API-Key", "value": "{{api_key}}"}
+            ],
+            "url": "{{base_url}}/api/internal/orders/1/status",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"status\": \"shipped\"\n}"
