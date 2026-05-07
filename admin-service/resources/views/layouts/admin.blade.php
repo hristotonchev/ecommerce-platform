@@ -15,6 +15,7 @@
             <a href="{{ route('admin.categories.index') }}" class="hover:text-gray-300">Categories</a>
             <a href="{{ route('admin.orders.index') }}" class="hover:text-gray-300">Orders</a>
             <a href="{{ route('admin.users.index') }}" class="hover:text-gray-300">Users</a>
+            <a href="{{ route('admin.reports.index') }}" class="hover:text-gray-300">Reports</a>
         </div>
         <div class="flex items-center space-x-4">
             <span class="text-gray-300">{{ Auth::user()->name }}</span>

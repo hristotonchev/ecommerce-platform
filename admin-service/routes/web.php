@@ -6,22 +6,19 @@ use App\Http\Controllers\Admin\ProductController;
 use App\Http\Controllers\Admin\CategoryController;
 use App\Http\Controllers\Admin\OrderController;
 use App\Http\Controllers\Admin\UserController;
+use App\Http\Controllers\Admin\ReportController;
 
 Route::get('/', function () {
     return redirect()->route('admin.dashboard');
 });
 
-// Auth routes
 require __DIR__.'/auth.php';
 
-// Admin routes
 Route::prefix('admin')
     ->name('admin.')
     ->middleware(['auth', 'admin'])
     ->group(function () {
-
-        Route::get('/dashboard', [DashboardController::class, 'index'])
-            ->name('dashboard');
+        Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
         Route::resource('products', ProductController::class);
         Route::post('products/{product}/restore', [ProductController::class, 'restore'])
@@ -30,4 +27,7 @@ Route::prefix('admin')
         Route::resource('categories', CategoryController::class);
         Route::resource('orders', OrderController::class)->only(['index', 'show', 'update']);
         Route::resource('users', UserController::class)->only(['index', 'show', 'destroy']);
+
+        Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
+        Route::get('/reports/export', [ReportController::class, 'export'])->name('reports.export');
     });

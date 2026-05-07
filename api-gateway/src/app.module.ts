@@ -1,9 +1,11 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { CacheModule } from '@nestjs/cache-manager';
 import { AuthModule } from './auth/auth.module';
 import { ProductsModule } from './products/products.module';
 import { OrdersModule } from './orders/orders.module';
+import { InternalModule } from './internal/internal.module';
 import { User } from './entities/user.entity';
 import { Category } from './entities/category.entity';
 import { Product } from './entities/product.entity';
@@ -14,6 +16,16 @@ import { OrderItem } from './entities/order-item.entity';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    CacheModule.registerAsync({
+      isGlobal: true,
+      imports: [ConfigModule],
+      useFactory: (config: ConfigService) => ({
+        store: 'memory', // simple in-memory cache
+        ttl: 300,        // 5 minutes default
+        max: 100,
+      }),
+      inject: [ConfigService],
+    }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (config: ConfigService) => ({
@@ -32,6 +44,7 @@ import { OrderItem } from './entities/order-item.entity';
     AuthModule,
     ProductsModule,
     OrdersModule,
+    InternalModule,
   ],
 })
 export class AppModule {}
