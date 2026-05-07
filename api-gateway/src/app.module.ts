@@ -6,6 +6,7 @@ import { AuthModule } from './auth/auth.module';
 import { ProductsModule } from './products/products.module';
 import { OrdersModule } from './orders/orders.module';
 import { InternalModule } from './internal/internal.module';
+import { WebsocketsModule } from './websockets/websockets.module';
 import { User } from './entities/user.entity';
 import { Category } from './entities/category.entity';
 import { Product } from './entities/product.entity';
@@ -19,9 +20,9 @@ import { OrderItem } from './entities/order-item.entity';
     CacheModule.registerAsync({
       isGlobal: true,
       imports: [ConfigModule],
-      useFactory: (config: ConfigService) => ({
-        store: 'memory', // simple in-memory cache
-        ttl: 300,        // 5 minutes default
+      useFactory: () => ({
+        store: 'memory',
+        ttl: 300,
         max: 100,
       }),
       inject: [ConfigService],
@@ -45,6 +46,7 @@ import { OrderItem } from './entities/order-item.entity';
     ProductsModule,
     OrdersModule,
     InternalModule,
+    WebsocketsModule,
   ],
 })
 export class AppModule {}

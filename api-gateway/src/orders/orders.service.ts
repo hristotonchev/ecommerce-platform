@@ -1,6 +1,6 @@
 import {
   Injectable, NotFoundException,
-  BadRequestException
+  BadRequestException, Inject, forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
@@ -9,6 +9,7 @@ import { OrderItem } from '../entities/order-item.entity';
 import { Product } from '../entities/product.entity';
 import { Inventory } from '../entities/inventory.entity';
 import { CreateOrderDto } from './dto/create-order.dto';
+import { OrdersGateway } from '../websockets/orders.gateway';
 
 @Injectable()
 export class OrdersService {
@@ -22,6 +23,8 @@ export class OrdersService {
     @InjectRepository(Inventory)
     private inventoryRepository: Repository<Inventory>,
     private dataSource: DataSource,
+    @Inject(forwardRef(() => OrdersGateway))
+    private ordersGateway: OrdersGateway,
   ) {}
 
   async create(userId: number, dto: CreateOrderDto): Promise<Order> {
@@ -82,11 +85,16 @@ export class OrdersService {
       }
     });
 
-    // After transaction committed — update status and return
     console.log(`[Payment] Processing payment for order #${savedOrderId} - SUCCESS`);
     await this.orderRepository.update(savedOrderId, { status: OrderStatus.CONFIRMED });
 
-    return this.findOne(savedOrderId);
+    const order = await this.findOne(savedOrderId);
+
+    // WebSocket notification
+    this.ordersGateway.notifyOrderUpdate(userId, order);
+    this.ordersGateway.broadcastOrderCreated(order);
+
+    return order;
   }
 
   async findOne(id: number, userId?: number): Promise<Order> {
@@ -149,6 +157,11 @@ export class OrdersService {
     }
 
     await this.orderRepository.update(id, { status });
-    return this.findOne(id);
+    const updated = await this.findOne(id);
+
+    // WebSocket notification
+    this.ordersGateway.notifyOrderUpdate(updated.user_id, updated);
+
+    return updated;
   }
 }
