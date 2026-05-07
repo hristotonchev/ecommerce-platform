@@ -1,0 +1,14 @@
+# Laravel
+admin-service/vendor/
+admin-service/.env
+admin-service/storage/logs/*
+admin-service/storage/framework/cache/*
+
+# Nest.js
+api-gateway/node_modules/
+api-gateway/dist/
+api-gateway/.env
+
+# General
+.DS_Store
+*.log
