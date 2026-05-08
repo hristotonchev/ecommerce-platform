@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { CacheModule } from '@nestjs/cache-manager';
@@ -12,6 +12,7 @@ import { InternalModule } from './internal/internal.module';
 import { WebsocketsModule } from './websockets/websockets.module';
 import { GraphqlModule } from './graphql/graphql.module';
 import { SearchModule } from './search/search.module';
+import { LoggingMiddleware } from './common/middleware/logging.middleware';
 import { User } from './entities/user.entity';
 import { Category } from './entities/category.entity';
 import { Product } from './entities/product.entity';
@@ -59,4 +60,8 @@ import { OrderItem } from './entities/order-item.entity';
     SearchModule,
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(LoggingMiddleware).forRoutes('*');
+  }
+}

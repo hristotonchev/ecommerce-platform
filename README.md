@@ -1,6 +1,6 @@
 # Ecommerce Platform
 
-Hybrid e-commerce platform built with **Nest.js** (API Gateway) and **Laravel** (Admin Panel), sharing a PostgreSQL database. Features real-time WebSocket updates, GraphQL API alongside REST, JWT authentication shared between both services, Redis caching with webhook-based invalidation, and a full CI/CD pipeline.
+Hybrid e-commerce platform built with **Nest.js** (API Gateway) and **Laravel** (Admin Panel), sharing a PostgreSQL database. Features real-time WebSocket updates, GraphQL API alongside REST, Elasticsearch advanced search, JWT authentication shared between both services, Redis caching with webhook-based invalidation, and a full CI/CD pipeline.
 
 ---
 
@@ -18,17 +18,19 @@ Hybrid e-commerce platform built with **Nest.js** (API Gateway) and **Laravel** 
                         |
                [PostgreSQL :5432]
                [Redis :6379]
+               [Elasticsearch :9200]
 ```
 
-**Nest.js** — public-facing API used by mobile apps and external clients:
+**Nest.js** — public-facing API:
 - JWT authentication (register, login)
 - Product browsing with Redis cache
-- Order placement with inventory management
+- Elasticsearch advanced search with fuzzy matching, filters, aggregations
+- Order placement with inventory management and transactions
 - GraphQL endpoint alongside REST
 - WebSocket gateway for real-time order updates
 - Internal webhook endpoints for cache invalidation
 
-**Laravel** — internal admin panel used by staff:
+**Laravel** — internal admin panel:
 - Session-based authentication (admin only)
 - Product and category management with image upload
 - Order status management with webhook sync to Nest.js
@@ -36,23 +38,25 @@ Hybrid e-commerce platform built with **Nest.js** (API Gateway) and **Laravel** 
 - Sales reports with CSV export
 - Fires webhooks to Nest.js on every product/order update
 
-Both services share the same PostgreSQL database and the same JWT secret, enabling a unified authentication experience.
+Both services share the same PostgreSQL database and the same JWT secret.
 
 ---
 
 ## Tech Stack
 
-| Layer      | Technology                        |
-|------------|-----------------------------------|
-| API        | Nest.js 11 + TypeScript           |
-| Admin      | Laravel 13 + Blade + Tailwind     |
-| Database   | PostgreSQL 15                     |
-| Cache      | Redis 7                           |
-| Auth       | JWT (shared secret, HS256)        |
-| Real-time  | Socket.io WebSockets              |
-| GraphQL    | Apollo Server + @nestjs/graphql   |
-| Container  | Docker + Docker Compose + Nginx   |
-| CI/CD      | GitHub Actions                    |
+| Layer         | Technology                        |
+|---------------|-----------------------------------|
+| API           | Nest.js 11 + TypeScript           |
+| Admin         | Laravel 13 + Blade + Tailwind     |
+| Database      | PostgreSQL 15                     |
+| Cache         | Redis 7                           |
+| Search        | Elasticsearch 8.13                |
+| Search UI     | Kibana 8.13                       |
+| Auth          | JWT (shared secret, HS256)        |
+| Real-time     | Socket.io WebSockets              |
+| GraphQL       | Apollo Server + @nestjs/graphql   |
+| Container     | Docker + Docker Compose + Nginx   |
+| CI/CD         | GitHub Actions                    |
 
 ---
 
@@ -65,8 +69,8 @@ Both services share the same PostgreSQL database and the same JWT secret, enabli
 git clone <repo-url>
 cd ecommerce-platform
 
-# 2. Start infrastructure
-docker-compose up -d postgres redis
+# 2. Start all infrastructure
+docker-compose up -d postgres redis elasticsearch
 
 # 3. Setup Nest.js API
 cd api-gateway
@@ -77,6 +81,9 @@ npm run start:dev
 # In a new terminal — seed the database
 cd api-gateway
 npm run seed
+
+# Index products in Elasticsearch
+curl http://localhost:3000/api/search/reindex
 
 # 4. Setup Laravel Admin
 cd admin-service
@@ -102,14 +109,16 @@ php artisan serve --port=8000
 
 ## Services
 
-| Service        | URL                        | Notes                  |
-|----------------|----------------------------|------------------------|
-| Nest.js API    | http://localhost:3000      | REST + GraphQL         |
-| GraphQL        | http://localhost:3000/graphql | Apollo Playground   |
-| Laravel Admin  | http://localhost:8000/admin | Session auth          |
-| PostgreSQL     | localhost:5432             | ecommerce_user / secret |
-| Redis          | localhost:6379             |                        |
-| Nginx          | http://localhost:80        | Reverse proxy          |
+| Service        | URL                           | Notes                    |
+|----------------|-------------------------------|--------------------------|
+| Nest.js API    | http://localhost:3000         | REST + GraphQL           |
+| GraphQL        | http://localhost:3000/graphql | Apollo Playground        |
+| Laravel Admin  | http://localhost:8000/admin   | Session auth             |
+| Elasticsearch  | http://localhost:9200         | Search engine            |
+| Kibana         | http://localhost:5601         | Elasticsearch UI         |
+| PostgreSQL     | localhost:5432                | ecommerce_user / secret  |
+| Redis          | localhost:6379                |                          |
+| Nginx          | http://localhost:80           | Reverse proxy            |
 
 ---
 
@@ -130,11 +139,46 @@ PUT    /api/products/:id          Update product — Admin role required
 DELETE /api/products/:id          Soft delete — Admin role required
 ```
 
+### Search — Elasticsearch powered
+```
+GET /api/search/products          Advanced search with fuzzy matching and aggregations
+GET /api/search/reindex           Reindex all products in Elasticsearch
+```
+
+Search query parameters:
+```
+q            Full-text search across name, description, category (fuzzy)
+category_id  Filter by category ID
+min_price    Minimum price filter
+max_price    Maximum price filter
+page         Page number (default: 1)
+limit        Results per page (default: 10)
+```
+
+Search response includes:
+```json
+{
+  "data": [
+    {
+      "id": 1,
+      "name": "iPhone 15",
+      "score": 4.24,
+      "highlight": { "name": ["<mark>iPhone</mark> 15"] }
+    }
+  ],
+  "meta": { "total": 2, "page": 1, "limit": 10, "last_page": 1 },
+  "aggregations": {
+    "price_stats": { "min": 849.99, "max": 999.99, "avg": 924.99 },
+    "categories": [{ "key": "Phones", "doc_count": 2 }]
+  }
+}
+```
+
 ### Orders — JWT required
 ```
 POST /api/orders                  Place order, checks inventory, mock payment
 GET  /api/orders/my-orders        Current user's orders
-GET  /api/orders/:id              Single order (users see own, admin sees all)
+GET  /api/orders/:id              Single order
 GET  /api/orders                  All orders — Admin role required
 PUT  /api/orders/:id/status       Update status — Admin role required
 ```
@@ -157,12 +201,17 @@ GET /api/user/orders     Returns current user's orders (validates Nest.js JWT)
 
 Available at **http://localhost:3000/graphql** with Apollo Playground.
 
-### Queries
+Add header for authenticated queries:
+```json
+{ "Authorization": "Bearer your-jwt-token" }
+```
+
+### Example Queries
 
 ```graphql
-# Public — no auth required
+# Public
 query {
-  products(filter: { page: 1, limit: 10, search: "iPhone", category_id: 1 }) {
+  products(filter: { page: 1, limit: 10, search: "iPhone" }) {
     total
     page
     last_page
@@ -170,16 +219,8 @@ query {
       id
       name
       price
-      description
-      is_active
-      category {
-        id
-        name
-      }
-      inventory {
-        quantity
-        reserved
-      }
+      category { name }
+      inventory { quantity }
     }
   }
 }
@@ -190,32 +231,16 @@ query {
     name
     price
     description
-    category { name }
-    inventory { quantity }
   }
 }
 
-# Authenticated — add Authorization: Bearer <token> header
+# Authenticated
 query {
   myOrders {
     id
     status
     total_amount
-    created_at
-    items {
-      product_id
-      quantity
-      unit_price
-      subtotal
-    }
-  }
-}
-
-query {
-  order(id: 1) {
-    id
-    status
-    total_amount
+    items { quantity unit_price subtotal }
   }
 }
 
@@ -230,14 +255,14 @@ query {
 }
 ```
 
-### Mutations
+### Example Mutations
 
 ```graphql
 # Admin only
 mutation {
   createProduct(input: {
     name: "New Product"
-    description: "Description here"
+    description: "Description"
     price: 99.99
     category_id: 1
     quantity: 50
@@ -245,13 +270,6 @@ mutation {
     id
     name
     price
-  }
-}
-
-mutation {
-  deleteProduct(id: 5) {
-    id
-    name
   }
 }
 ```
@@ -269,30 +287,56 @@ const socket = io('http://localhost:3000/orders', {
   auth: { token: 'your-jwt-token' }
 });
 
-// Fired when connection is established
-socket.on('connected', (data) => {
-  console.log(data.message); // "Connected to order updates"
-});
+socket.on('connected',     (data) => console.log(data.message));
+socket.on('order_updated', (data) => console.log(`Order #${data.orderId} is now ${data.status}`));
+socket.on('order_created', (data) => console.log(`New order #${data.orderId} placed`));
 
-// Fired when your order status changes
-socket.on('order_updated', (data) => {
-  console.log(`Order #${data.orderId} is now ${data.status}`);
-  console.log(data.message);
-});
-
-// Fired when any new order is placed (broadcast to all)
-socket.on('order_created', (data) => {
-  console.log(`New order #${data.orderId} placed`);
-});
-
-// Ping-pong health check
 socket.emit('ping');
 socket.on('pong', (data) => console.log(data.timestamp));
 ```
 
-Events are emitted automatically when:
+Events fire automatically when:
 - A user places an order → `order_created` broadcast + `order_updated` to the user
 - An admin updates order status → `order_updated` to the order owner
+
+---
+
+## Elasticsearch Search
+
+### Features
+- **Full-text search** across product name, description, and category
+- **Fuzzy matching** — tolerates typos (AUTO fuzziness)
+- **Boosted fields** — name matches score 3x higher than description
+- **Price range filter** — min_price and max_price parameters
+- **Category filter** — exact match by category ID
+- **Result highlighting** — matched terms wrapped in `<mark>` tags
+- **Aggregations** — price statistics and category breakdown per query
+- **Bulk reindex** — reindex all products via GET /api/search/reindex
+
+### Example Searches
+
+```bash
+# Full-text fuzzy search
+curl "http://localhost:3000/api/search/products?q=iphone"
+
+# With price range
+curl "http://localhost:3000/api/search/products?q=laptop&min_price=1000&max_price=3000"
+
+# Category filter
+curl "http://localhost:3000/api/search/products?category_id=4"
+
+# Combined
+curl "http://localhost:3000/api/search/products?q=pro&category_id=5&min_price=500"
+
+# Reindex after bulk changes
+curl "http://localhost:3000/api/search/reindex"
+```
+
+### Auto-indexing
+Products are automatically indexed in Elasticsearch when:
+- A new product is created via POST /api/products
+- A product is updated via PUT /api/products/:id
+- A product is deleted (removed from index) via DELETE /api/products/:id
 
 ---
 
@@ -300,63 +344,37 @@ Events are emitted automatically when:
 
 Available at **http://localhost:8000/admin** — admin role required.
 
-### Dashboard
-- Total orders, total revenue, total products, pending orders count
-- Recent orders table with status indicators
-
-### Products
-- Full CRUD with image upload (max 10MB, stored in local storage)
-- Soft delete with restore functionality
-- Search by name
-- Paginated list with category and stock info
-- On save, fires webhook to Nest.js to invalidate Redis cache
-
-### Categories
-- Create, edit, delete categories
-- Nested support — categories can have parent categories
-- Delete is blocked if the category has active products or subcategories
-
-### Orders
-- Filterable list by status and customer email
-- Status management: pending, confirmed, processing, shipped, delivered, cancelled
-- Order detail view with line items and totals
-- Status update fires webhook to Nest.js, triggering WebSocket push to customer
-
-### Users
-- Customer list with role badges
-- Per-user order history
-
-### Reports
-- Daily sales (last 7 days)
-- Monthly sales (last 12 months)
-- Top 10 products by revenue
-- CSV export for daily and monthly data
+- **Dashboard** — revenue, order counts, recent activity
+- **Products** — CRUD with image upload, soft deletes, webhooks to invalidate Redis + Elasticsearch
+- **Categories** — nested categories, delete blocked if products exist
+- **Orders** — status management, webhook sync to Nest.js triggers WebSocket push
+- **Users** — customer list with order history
+- **Reports** — daily/monthly sales, top products, CSV export
 
 ---
 
 ## Integration Flow
 
-### Product Update (Laravel → Nest.js cache invalidation)
+### Product Update
 
 ```
-Admin edits product in Laravel
-  → PUT /admin/products/:id
-  → UPDATE products SET ... in PostgreSQL
-  → POST /api/internal/cache/invalidate {"type":"product","id":N}
-  → Nest.js deletes product_N and products_list from Redis
-  → Next GET /api/products/:id fetches fresh data from PostgreSQL
+Admin saves product (Laravel)
+  -> UPDATE products in PostgreSQL
+  -> POST /api/internal/cache/invalidate (Nest.js)
+  -> Redis cache cleared for that product
+  -> Next API read fetches fresh data from PostgreSQL
+  Note: run /api/search/reindex to sync Elasticsearch after bulk changes
 ```
 
-### Order Status Update (Laravel → Nest.js → WebSocket → Customer)
+### Order Status Update
 
 ```
-Admin changes order status in Laravel
-  → PUT /admin/orders/:id {"status":"shipped"}
-  → UPDATE orders SET status='shipped' in PostgreSQL
-  → POST /api/internal/orders/:id/status
-  → Nest.js updates its own order record
-  → WebSocket push to user_N room
-  → Customer's mobile app receives order_updated event instantly
+Admin changes order status (Laravel)
+  -> UPDATE orders in PostgreSQL
+  -> POST /api/internal/orders/:id/status (Nest.js)
+  -> Nest.js syncs its record
+  -> WebSocket push to customer's connected socket
+  -> Customer sees instant status update
 ```
 
 ---
@@ -370,9 +388,7 @@ cd api-gateway
 npm run test
 ```
 
-Covers:
-- `ProductsService` — findAll with filters, findOne, create with inventory, soft delete
-- `OrdersService` — findOne, findAll pagination, updateStatus with inventory release
+Covers ProductsService and OrdersService — findAll, findOne, create, update, delete, inventory management.
 
 ### Laravel Feature Tests — 21 passing
 
@@ -383,11 +399,7 @@ DB_USERNAME=ecommerce_user DB_PASSWORD=secret \
 php artisan test
 ```
 
-Covers:
-- `DashboardTest` — auth required, admin role required, metrics render
-- `ProductTest` — CRUD, validation, image upload, soft delete, guest access denied
-- `OrderTest` — list, filter, detail, status update, validation
-- `ReportTest` — view, CSV export daily/monthly, correct headers
+Covers DashboardTest, ProductTest, OrderTest, ReportTest.
 
 ---
 
@@ -398,85 +410,57 @@ cd api-gateway
 npm run seed
 ```
 
-Creates:
-- 3 users (1 admin, 2 customers)
-- 3 top-level categories + 2 subcategories under Electronics
-- 5 products with inventory
-- 2 sample orders for maria@example.com
+Creates 3 users, 5 categories (2 nested), 5 products with inventory, 2 sample orders.
 
-To reset and reseed:
+Reset and reseed:
 
 ```bash
 docker exec -it ecommerce-platform-postgres-1 psql \
   -U ecommerce_user -d ecommerce \
   -c "TRUNCATE order_items, orders, inventory, products, categories, users RESTART IDENTITY CASCADE;"
-
 npm run seed
+curl http://localhost:3000/api/search/reindex
 ```
 
 ---
 
 ## CI/CD Pipeline
 
-Two GitHub Actions workflows in `.github/workflows/`:
-
-### ci.yml — runs on every push and pull request to main/develop
+### ci.yml — every push and PR to main/develop
 
 ```
-nestjs job:
-  - Install Node.js 22
-  - npm ci
-  - Run 14 unit tests
-  - Build TypeScript
-
-laravel job:
-  - Install PHP 8.4
-  - composer install
-  - Run 21 feature tests
-
-docker job (after tests pass):
-  - Build Nest.js Docker image
-  - Build Laravel Docker image
-  - Validate docker-compose config
+nestjs  -> npm ci, 14 unit tests, TypeScript build
+laravel -> composer install, 21 feature tests
+docker  -> build both images, validate docker-compose config
 ```
 
-### cd.yml — runs on push to main only
+### cd.yml — push to main only
 
 ```
-deploy job:
-  - Build production Nest.js assets
-  - Build production Laravel assets
-  - Tag Docker images with git SHA
-  - Ready for deployment to any environment
+Build production assets for both services
+Tag Docker images with git SHA
+Ready for deployment
 ```
 
 ---
 
 ## Key Design Decisions
 
-**Shared database over microservice isolation**
-Both services read and write to the same PostgreSQL instance. This avoids distributed transaction complexity while still allowing independent deployment and scaling. For the current scale, the simplicity benefit outweighs the coupling cost.
+**Shared database** — Both services share PostgreSQL. Avoids distributed transaction complexity while allowing independent deployment.
 
-**Redis caching with event-driven invalidation**
-Product reads are cached in Redis with a 5-minute TTL. When Laravel admin updates a product, it fires a POST webhook to Nest.js `/api/internal/cache/invalidate`. This ensures the mobile API returns fresh data without waiting for TTL expiry — typically within milliseconds of the admin save.
+**Redis + Elasticsearch dual layer** — Redis caches exact product lookups (O(1), milliseconds). Elasticsearch powers full-text search with fuzzy matching and aggregations. Different tools for different access patterns.
 
-**JWT shared secret for unified auth**
-A single `JWT_SECRET` environment variable is read by both services. Tokens issued by Nest.js are valid in Laravel's `/api/*` routes via the `JwtMiddleware`. The Laravel admin panel uses session-based auth separately, but also validates JWT tokens for API routes.
+**Event-driven cache invalidation** — Laravel fires webhooks to Nest.js on every product change. Redis cache is cleared immediately. No stale data.
 
-**bcrypt prefix compatibility**
-Node.js bcryptjs generates `$2b$` hashes. PHP's password_hash generates `$2y$` hashes. The algorithms are identical — only the prefix differs. The seeder replaces `$2b$` with `$2y$` so users created via the API can log in to the Laravel admin panel without any manual intervention.
+**Shared JWT secret** — One JWT_SECRET in both .env files. Tokens from Nest.js work in Laravel /api/* routes and vice versa.
 
-**Optimistic inventory reservation**
-When an order is placed, stock is moved to `reserved` (not deducted from `quantity`). Actual deduction happens when the order status changes to `shipped`. Cancellations release the reservation. This prevents overselling without requiring pessimistic locking on reads.
+**bcrypt prefix compatibility** — Seeder replaces Node.js $2b$ with PHP's $2y$. Identical algorithm, different prefix. Users work in both systems without extra steps.
 
-**Soft deletes on products**
-Products are never hard-deleted. The `deleted_at` column is set instead. This preserves order history integrity — order items always reference a valid product even after the product is removed from the catalog. Laravel admin shows a restore option for soft-deleted products.
+**Optimistic inventory reservation** — Stock reserved on order, deducted on ship, released on cancel. Prevents overselling without pessimistic locks on reads.
 
-**CQRS-inspired separation**
-Write operations (create order, update product) go through Nest.js with full validation, transactions, and cache invalidation. Reads use Redis as the first layer, falling back to PostgreSQL on cache miss. The Laravel admin bypasses the cache and reads directly from PostgreSQL to always show accurate data.
+**Soft deletes** — Products never hard-deleted. Order history always references valid products.
 
-**GraphQL alongside REST**
-The GraphQL endpoint provides an alternative interface for the same data, useful for clients that need flexible queries. It reuses the same service layer as REST — no duplication of business logic. Both REST and GraphQL share the same JWT authentication guards.
+**GraphQL alongside REST** — Same service layer, two interfaces. Clients choose based on their needs. No business logic duplication.
 
 ---
 
@@ -484,95 +468,54 @@ The GraphQL endpoint provides an alternative interface for the same data, useful
 
 ```
 ecommerce-platform/
-├── .github/
-│   └── workflows/
-│       ├── ci.yml              GitHub Actions CI
-│       └── cd.yml              GitHub Actions CD
-├── api-gateway/                Nest.js public API
+├── .github/workflows/
+│   ├── ci.yml
+│   └── cd.yml
+├── api-gateway/
 │   ├── src/
-│   │   ├── auth/               JWT strategy, guards, decorators
-│   │   │   ├── guards/         JwtAuthGuard, RolesGuard, ApiKeyGuard
-│   │   │   │                   GqlAuthGuard, GqlRolesGuard
-│   │   │   └── dto/            RegisterDto, LoginDto
-│   │   ├── products/           CRUD with Redis caching
-│   │   │   ├── dto/            CreateProductDto, UpdateProductDto, QueryDto
-│   │   │   └── products.service.ts
-│   │   ├── orders/             Order processing with transactions
-│   │   │   ├── dto/            CreateOrderDto, OrderItemDto
-│   │   │   └── orders.service.ts
-│   │   ├── internal/           Webhook endpoints from Laravel
-│   │   ├── websockets/         Socket.io gateway for real-time updates
-│   │   ├── graphql/            Apollo GraphQL
-│   │   │   ├── types/          ProductType, OrderType, CategoryType
-│   │   │   ├── inputs/         ProductsFilterInput, CreateProductInput
-│   │   │   └── resolvers/      ProductsResolver, OrdersResolver
-│   │   ├── entities/           TypeORM entities
-│   │   │   ├── user.entity.ts
-│   │   │   ├── category.entity.ts
-│   │   │   ├── product.entity.ts
-│   │   │   ├── inventory.entity.ts
-│   │   │   ├── order.entity.ts
-│   │   │   └── order-item.entity.ts
-│   │   └── database/
-│   │       └── seed.ts         Database seeder
-│   ├── test/                   Unit tests (14 tests)
-│   ├── docs/
-│   │   ├── ecommerce-api.postman_collection.json
-│   │   └── ecommerce-local.postman_environment.json
+│   │   ├── auth/            JWT, guards, decorators, GQL guards
+│   │   ├── products/        CRUD, Redis cache
+│   │   ├── orders/          Transactions, inventory, WebSocket notify
+│   │   ├── internal/        Webhook endpoints
+│   │   ├── websockets/      Socket.io real-time gateway
+│   │   ├── search/          Elasticsearch service + controller
+│   │   ├── graphql/         Apollo types, inputs, resolvers
+│   │   └── entities/        TypeORM entities
+│   ├── docs/                Postman collection + environment
 │   ├── Dockerfile
 │   └── .env.example
-├── admin-service/              Laravel admin panel
-│   ├── app/
-│   │   ├── Http/
-│   │   │   ├── Controllers/
-│   │   │   │   ├── Admin/
-│   │   │   │   │   ├── DashboardController.php
-│   │   │   │   │   ├── ProductController.php
-│   │   │   │   │   ├── CategoryController.php
-│   │   │   │   │   ├── OrderController.php
-│   │   │   │   │   ├── UserController.php
-│   │   │   │   │   └── ReportController.php
-│   │   │   │   └── Api/
-│   │   │   │       └── UserController.php   Shared JWT routes
-│   │   │   └── Middleware/
-│   │   │       ├── AdminMiddleware.php
-│   │   │       └── JwtMiddleware.php
-│   │   └── Models/
-│   │       └── User.php
-│   ├── resources/views/admin/  Blade templates
-│   │   ├── dashboard.blade.php
-│   │   ├── products/
-│   │   ├── categories/
-│   │   ├── orders/
-│   │   ├── users/
-│   │   └── reports/
-│   ├── routes/
-│   │   ├── web.php             Admin panel routes
-│   │   └── api.php             JWT-protected API routes
-│   ├── tests/Feature/Admin/    Feature tests (21 tests)
+├── admin-service/
+│   ├── app/Http/Controllers/Admin/
+│   ├── resources/views/admin/
+│   ├── routes/web.php + api.php
+│   ├── tests/Feature/Admin/
 │   ├── Dockerfile
 │   └── .env.example
-├── nginx/
-│   └── nginx.conf              Reverse proxy configuration
-├── docker-compose.yml          Full stack definition
-└── README.md
+├── nginx/nginx.conf
+└── docker-compose.yml
 ```
+
+---
+
+## Bonus Features Implemented
+
+All 5 bonus points from the requirements:
+
+1. **WebSockets** — Real-time order updates via Socket.io. Users receive instant push notifications when their order status changes.
+2. **GraphQL** — Full Apollo GraphQL endpoint alongside REST. Supports queries for products and orders, mutations for admin operations, JWT auth via custom GQL guards.
+3. **Elasticsearch** — Advanced product search with fuzzy matching, field boosting, price range filters, category filters, result highlighting, and price/category aggregations per query.
+4. **Docker Compose** — All services defined: PostgreSQL, Redis, Elasticsearch, Kibana, Nest.js, Laravel, Nginx.
+5. **CI/CD** — GitHub Actions with separate CI (tests + build) and CD (production build + Docker image tagging) workflows.
 
 ---
 
 ## Postman Collection
 
-Import both files from `api-gateway/docs/`:
+Import from `api-gateway/docs/`:
 - `ecommerce-api.postman_collection.json`
 - `ecommerce-local.postman_environment.json`
 
-Select the **Ecommerce Local** environment. Run **Auth → Login (Admin)** first — the JWT token saves automatically to all subsequent requests via a test script.
-
-The collection covers:
-- Auth (register, login with auto-token-save)
-- Products (all endpoints including admin mutations)
-- Orders (place order, my orders, admin management)
-- Internal (cache invalidation, order sync — with and without API key to show 401)
+Select **Ecommerce Local** environment. Run **Auth → Login (Admin)** first — token saves automatically.
 
 ---
 
@@ -587,6 +530,7 @@ DB_USER=ecommerce_user
 DB_PASS=secret
 REDIS_HOST=localhost
 REDIS_PORT=6379
+ELASTICSEARCH_URL=http://localhost:9200
 JWT_SECRET=your-super-secret-jwt-key-change-in-production
 JWT_EXPIRES_IN=15m
 PORT=3000
