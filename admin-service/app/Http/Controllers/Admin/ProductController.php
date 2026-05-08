@@ -3,10 +3,12 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
+use App\Http\Requests\Admin\StoreProductRequest;
+use App\Http\Requests\Admin\UpdateProductRequest;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Http\Request;
 
 class ProductController extends Controller
 {
@@ -15,7 +17,7 @@ class ProductController extends Controller
         $query = DB::table('products as p')
             ->leftJoin('categories as c', 'p.category_id', '=', 'c.id')
             ->leftJoin('inventory as i', 'p.id', '=', 'i.product_id')
-            ->select('p.*', 'c.name as category_name', 'i.quantity')
+            ->select('p.*', 'c.name as category_name', 'i.quantity', 'i.reserved')
             ->whereNull('p.deleted_at')
             ->orderBy('p.created_at', 'desc');
 
@@ -33,17 +35,8 @@ class ProductController extends Controller
         return view('admin.products.create', compact('categories'));
     }
 
-    public function store(Request $request)
+    public function store(StoreProductRequest $request)
     {
-        $request->validate([
-            'name'        => 'required|string|max:255',
-            'description' => 'required|string',
-            'price'       => 'required|numeric|min:0',
-            'category_id' => 'required|integer|exists:categories,id',
-            'quantity'    => 'required|integer|min:0',
-            'image'       => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:10240',
-        ]);
-
         $imagePath = null;
         if ($request->hasFile('image') && $request->file('image')->isValid()) {
             $imagePath = $request->file('image')->store('products', 'public');
@@ -70,7 +63,7 @@ class ProductController extends Controller
         $this->notifyNestjs($productId);
 
         return redirect()->route('admin.products.index')
-            ->with('success', 'Product "' . $request->name . '" created successfully!');
+            ->with('success', 'Product "' . $request->name . '" created!');
     }
 
     public function edit($id)
@@ -87,17 +80,8 @@ class ProductController extends Controller
         return view('admin.products.edit', compact('product', 'categories'));
     }
 
-    public function update(Request $request, $id)
+    public function update(UpdateProductRequest $request, $id)
     {
-        $request->validate([
-            'name'        => 'required|string|max:255',
-            'description' => 'required|string',
-            'price'       => 'required|numeric|min:0',
-            'category_id' => 'required|integer|exists:categories,id',
-            'quantity'    => 'required|integer|min:0',
-            'image'       => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:10240',
-        ]);
-
         $data = [
             'name'        => $request->name,
             'description' => $request->description,
@@ -107,10 +91,8 @@ class ProductController extends Controller
         ];
 
         if ($request->hasFile('image') && $request->file('image')->isValid()) {
-            // Delete old image
             $old = DB::table('products')->where('id', $id)->value('image_path');
             if ($old) Storage::disk('public')->delete($old);
-
             $data['image_path'] = $request->file('image')->store('products', 'public');
         }
 
@@ -121,7 +103,7 @@ class ProductController extends Controller
         $this->notifyNestjs($id);
 
         return redirect()->route('admin.products.index')
-            ->with('success', 'Product updated successfully!');
+            ->with('success', 'Product updated!');
     }
 
     public function destroy($id)
