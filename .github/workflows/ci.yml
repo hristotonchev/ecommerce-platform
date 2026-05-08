@@ -111,19 +111,15 @@ jobs:
           cp .env.example .env
           php artisan key:generate
 
-      - name: Start Nest.js to create DB schema
-        working-directory: api-gateway
+      - name: Run migrations
+        working-directory: admin-service
         env:
-          DB_HOST: localhost
+          DB_HOST: 127.0.0.1
           DB_PORT: 5432
-          DB_NAME: ecommerce
-          DB_USER: ecommerce_user
-          DB_PASS: secret
-          JWT_SECRET: test-secret-key
-          API_KEY: test-api-key
-        run: |
-          npm ci
-          timeout 30 npm run start:prod || true
+          DB_DATABASE: ecommerce
+          DB_USERNAME: ecommerce_user
+          DB_PASSWORD: secret
+        run: php artisan migrate --force
 
       - name: Run tests
         working-directory: admin-service
