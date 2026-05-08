@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreProductRequest;
 use App\Http\Requests\Admin\UpdateProductRequest;
+use App\Jobs\ProcessProductImage;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -39,6 +40,7 @@ class ProductController extends Controller
     {
         $imagePath = null;
         if ($request->hasFile('image') && $request->file('image')->isValid()) {
+            // Store immediately
             $imagePath = $request->file('image')->store('products', 'public');
         }
 
@@ -59,6 +61,11 @@ class ProductController extends Controller
             'reserved'   => 0,
             'updated_at' => now(),
         ]);
+
+        // Dispatch image processing job to queue
+        if ($imagePath) {
+            ProcessProductImage::dispatch($productId, $imagePath);
+        }
 
         $this->notifyNestjs($productId);
 
@@ -93,7 +100,12 @@ class ProductController extends Controller
         if ($request->hasFile('image') && $request->file('image')->isValid()) {
             $old = DB::table('products')->where('id', $id)->value('image_path');
             if ($old) Storage::disk('public')->delete($old);
-            $data['image_path'] = $request->file('image')->store('products', 'public');
+
+            $imagePath       = $request->file('image')->store('products', 'public');
+            $data['image_path'] = $imagePath;
+
+            // Dispatch image processing job
+            ProcessProductImage::dispatch($id, $imagePath);
         }
 
         DB::table('products')->where('id', $id)->update($data);
