@@ -4,8 +4,10 @@ namespace Tests\Feature\Admin;
 
 use Tests\TestCase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
+use App\Jobs\ProcessProductImage;
 
 class ProductTest extends TestCase
 {
@@ -14,6 +16,9 @@ class ProductTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        Bus::fake();
+        Storage::fake('public');
 
         $this->categoryId = DB::table('categories')->insertGetId([
             'name'       => 'Test Cat ' . uniqid(),
@@ -25,9 +30,9 @@ class ProductTest extends TestCase
     protected function tearDown(): void
     {
         DB::table('products')
-            ->whereNull('deleted_at')
             ->where('category_id', $this->categoryId)
-            ->orderBy("id")->each(function($p) {
+            ->orderBy('id')
+            ->each(function($p) {
                 DB::table('inventory')->where('product_id', $p->id)->delete();
             });
         DB::table('products')->where('category_id', $this->categoryId)->delete();
@@ -64,13 +69,12 @@ class ProductTest extends TestCase
 
     public function test_admin_can_create_product(): void
     {
-        Storage::fake('public');
-        $admin    = $this->createAdminUser();
+        $admin      = $this->createAdminUser();
         $uniqueName = 'Test Product ' . uniqid();
 
         $response = $this->actingAs($admin)->post('/admin/products', [
             'name'        => $uniqueName,
-            'description' => 'Test description',
+            'description' => 'Test description here',
             'price'       => 99.99,
             'category_id' => $this->categoryId,
             'quantity'    => 10,
@@ -79,20 +83,18 @@ class ProductTest extends TestCase
 
         $response->assertRedirect('/admin/products');
         $response->assertSessionHas('success');
-
         $this->assertDatabaseHas('products', ['name' => $uniqueName]);
     }
 
     public function test_admin_can_create_product_with_image(): void
     {
-        Storage::fake('public');
-        $admin = $this->createAdminUser();
-        $image = UploadedFile::fake()->image('test.jpg', 800, 600);
+        $admin      = $this->createAdminUser();
         $uniqueName = 'Image Product ' . uniqid();
+        $image      = UploadedFile::fake()->image('test.jpg', 800, 600);
 
         $response = $this->actingAs($admin)->post('/admin/products', [
             'name'        => $uniqueName,
-            'description' => 'Has image',
+            'description' => 'Has image description',
             'price'       => 49.99,
             'category_id' => $this->categoryId,
             'quantity'    => 5,
@@ -101,9 +103,10 @@ class ProductTest extends TestCase
 
         $response->assertRedirect('/admin/products');
 
-        $product = DB::table('products')->where('name', $uniqueName)->first();
-        $this->assertNotNull($product);
-        $this->assertNotNull($product->image_path);
-        Storage::disk('public')->assertExists($product->image_path);
+        // Verify job was dispatched to queue
+        Bus::assertDispatched(ProcessProductImage::class);
+
+        // Verify product was created
+        $this->assertDatabaseHas('products', ['name' => $uniqueName]);
     }
 }
