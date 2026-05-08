@@ -42,6 +42,10 @@ export class SearchService implements OnModuleInit {
   }
 
   async indexProduct(product: any) {
+    // TODO: Hook this into a BullMQ job so that Elasticsearch indexing is
+    //       non-blocking and automatically retried on failure.  The current
+    //       synchronous try/catch silently drops updates if ES is temporarily
+    //       unavailable, which means the search index can drift from the DB.
     try {
       await this.elastic.index({
         index: INDEX,

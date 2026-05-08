@@ -61,6 +61,9 @@ class OrderController extends Controller
 
     private function notifyNestjs(int $orderId, string $status): void
     {
+        // TODO: Same as ProductController — extract into a NestjsWebhookService.
+        //       Also consider wrapping the HTTP call in a queued job so that a
+        //       slow or unavailable Nest.js instance doesn't block the admin UI.
         try {
             $client = new \GuzzleHttp\Client(['timeout' => 3]);
             $client->post(

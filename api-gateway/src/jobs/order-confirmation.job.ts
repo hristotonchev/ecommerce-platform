@@ -13,18 +13,26 @@ export interface OrderConfirmationPayload {
   }>;
 }
 
+// TODO: Replace this in-process async job with a proper persistent queue.
+//       Recommended path: add @nestjs/bullmq + Redis so emails survive restarts,
+//       failed jobs are retried with exponential back-off, and the queue depth
+//       is observable in Bull Dashboard.
+//
+// TODO: Integrate a real transactional email provider:
+//         - AWS SES  → use @aws-sdk/client-ses
+//         - SendGrid → use @sendgrid/mail
+//         - Nodemailer + SMTP relay (e.g. Mailgun, Postmark)
+//       Render the email from a Handlebars / Mjml template so the content is
+//       easy to update without touching TypeScript.
 export class OrderConfirmationJob {
   private static readonly logger = new Logger('EmailQueue');
 
   static async process(payload: OrderConfirmationPayload): Promise<void> {
-    // In production: use nodemailer, SendGrid, AWS SES etc.
-    // For now: mock implementation with realistic logging
-
     this.logger.log(
       `[Queue] Processing order confirmation email for order #${payload.orderId}`
     );
 
-    // Simulate email processing delay
+    // Simulate async email processing (replace with real provider call above)
     await new Promise(resolve => setTimeout(resolve, 100));
 
     const itemsList = payload.items

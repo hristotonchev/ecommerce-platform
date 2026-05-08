@@ -28,9 +28,17 @@ class ProcessProductImage implements ShouldQueue
     {
         Log::info("[ImageQueue] Processing image for product #{$this->productId}");
 
-        // In production: resize, optimize, generate thumbnails
-        // Mock: simulate processing
-        sleep(0); // non-blocking
+        // TODO: Perform real image optimisation before saving:
+        //         1. Resize to multiple break-points (e.g. 800px, 400px, 200px).
+        //         2. Convert to WebP for modern browsers while keeping a JPEG fallback.
+        //         3. Strip EXIF metadata to avoid leaking GPS coordinates.
+        //         4. Upload all variants to S3 (or another object store) and store
+        //            the CDN URLs instead of local disk paths.
+        //       Use intervention/image (v3) which is already in composer.json.
+        //
+        // TODO: Store all generated variant paths in a `product_images` table
+        //       rather than a single `image_path` column so the API can serve
+        //       the right size based on the requesting device's viewport.
 
         $fullPath = Storage::disk('public')->path($this->imagePath);
 

@@ -5,11 +5,11 @@ import {
 } from '@nestjs/common';
 import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
+import { UpdateStatusDto } from './dto/update-status.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../entities/user.entity';
-import { OrderStatus } from '../entities/order.entity';
 
 @Controller('api/orders')
 @UseGuards(JwtAuthGuard)
@@ -47,8 +47,11 @@ export class OrdersController {
   @Roles(UserRole.ADMIN)
   updateStatus(
     @Param('id', ParseIntPipe) id: number,
-    @Body('status') status: OrderStatus,
+    @Body() dto: UpdateStatusDto,
   ) {
-    return this.ordersService.updateStatus(id, status);
+    // TODO: Add an explicit status-transition guard here so invalid transitions
+    //       (e.g. DELIVERED → PENDING) are rejected with a clear 422 response
+    //       rather than silently persisting an inconsistent state.
+    return this.ordersService.updateStatus(id, dto.status);
   }
 }

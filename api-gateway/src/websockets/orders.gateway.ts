@@ -11,6 +11,10 @@ import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 
+// TODO: Lock down the CORS origin list before going to production.
+//       `origin: '*'` is fine for local dev but allows any domain to connect
+//       to the WebSocket namespace.  Read the allowed origins from config
+//       (e.g. process.env.CORS_ORIGINS) and pass an array or a validator fn.
 @WebSocketGateway({
   cors: { origin: '*' },
   namespace: '/orders',

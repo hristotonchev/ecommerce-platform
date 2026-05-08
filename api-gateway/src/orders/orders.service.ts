@@ -94,7 +94,12 @@ export class OrdersService {
       }
     });
 
-    // Mock payment
+    // Mock payment — always succeeds for demo purposes.
+    // TODO: Replace with a real payment gateway (Stripe is the most straightforward):
+    //         const intent = await stripe.paymentIntents.create({...});
+    //       Run payment authorisation inside the same DB transaction so a failed
+    //       charge automatically rolls back the inventory reservation instead of
+    //       leaving orphaned reserved stock.
     console.log(`[Payment] Processing payment for order #${savedOrderId} - SUCCESS`);
     await this.orderRepository.update(savedOrderId, { status: OrderStatus.CONFIRMED });
 
@@ -154,6 +159,10 @@ export class OrdersService {
 
   async updateStatus(id: number, status: OrderStatus): Promise<Order> {
     const order = await this.findOne(id);
+
+    // TODO: Enforce a legal status-transition matrix here to prevent nonsensical
+    //       state changes (e.g. DELIVERED → PENDING, CANCELLED → SHIPPED).
+    //       A simple map of `allowedTransitions[current] = [next, ...]` would do.
 
     if (status === OrderStatus.CANCELLED) {
       for (const item of order.items) {

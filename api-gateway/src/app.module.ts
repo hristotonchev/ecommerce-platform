@@ -23,6 +23,11 @@ import { OrderItem } from './entities/order-item.entity';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    // TODO: Switch to the Redis store for production.
+    //       With the current in-memory store the cache is not shared between
+    //       multiple Nest.js instances (horizontal scaling breaks caching) and
+    //       is lost on every restart.  Use `cache-manager-ioredis-yet` or
+    //       `@nestjs/cache-manager` with `redisStore` from `cache-manager-redis-store`.
     CacheModule.registerAsync({
       isGlobal: true,
       imports: [ConfigModule],
@@ -46,6 +51,9 @@ import { OrderItem } from './entities/order-item.entity';
         password: config.get('DB_PASS', 'secret'),
         database: config.get('DB_NAME', 'ecommerce'),
         entities: [User, Category, Product, Inventory, Order, OrderItem],
+        // TODO: Disable `synchronize` in production and rely on explicit migration
+        //       files instead.  Auto-sync can cause accidental column drops or
+        //       type changes against a live database.
         synchronize: true,
         logging: false,
       }),

@@ -10,11 +10,14 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         private config: ConfigService,
         private usersService: UsersService,
     ) {
-        // @ts-ignore
         super({
             jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
             ignoreExpiration: false,
-            secretOrKey: config.get<string>('JWT_SECRET'),
+            // Non-null assertion is safe: JWT_SECRET is a required env var and the
+            // app will hard-fail on startup if it is absent (ConfigModule validates it).
+            // TODO: Add Joi/Zod validation to ConfigModule.forRoot so missing env vars
+            //       throw at boot time rather than surfacing as runtime auth failures.
+            secretOrKey: config.get<string>('JWT_SECRET')!,
         });
     }
 

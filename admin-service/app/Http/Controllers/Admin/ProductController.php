@@ -134,6 +134,12 @@ class ProductController extends Controller
 
     private function notifyNestjs(int $productId): void
     {
+        // TODO: Move this HTTP call into a dedicated NestjsWebhookService that is
+        //       injected via the service container.  Benefits:
+        //         - Testable in isolation (mock the service in feature tests).
+        //         - Single place to add retry logic (e.g. a queued job with
+        //           exponential back-off if Nest.js is temporarily unavailable).
+        //         - Controllers stay thin.
         try {
             $client = new \GuzzleHttp\Client(['timeout' => 3]);
             $client->post(

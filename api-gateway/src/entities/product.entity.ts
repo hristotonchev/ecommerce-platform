@@ -1,6 +1,6 @@
 import {
   Entity, PrimaryGeneratedColumn, Column,
-  CreateDateColumn, DeleteDateColumn,
+  CreateDateColumn, UpdateDateColumn, DeleteDateColumn,
   ManyToOne, OneToOne, JoinColumn
 } from 'typeorm';
 import { Category } from './category.entity';
@@ -34,6 +34,11 @@ export class Product {
 
   @CreateDateColumn()
   created_at: Date;
+
+  // updated_at is needed for Elasticsearch incremental re-indexing and for
+  // cache validation — it was missing from the original entity definition.
+  @UpdateDateColumn()
+  updated_at: Date;
 
   @DeleteDateColumn()
   deleted_at: Date;

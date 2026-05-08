@@ -9,6 +9,9 @@ class DashboardController extends Controller
 {
     public function index()
     {
+        // TODO: Cache these aggregate queries in Redis (Cache::remember) with a
+        //       TTL of ~60 s.  At high order volumes each dashboard page load runs
+        //       5 full-table COUNT/SUM queries which will slow down noticeably.
         $stats = [
             'total_orders'    => DB::table('orders')->count(),
             'total_revenue'   => DB::table('orders')

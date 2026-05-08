@@ -25,6 +25,10 @@ export class AuthService {
         const valid = await bcrypt.compare(dto.password, user.password);
         if (!valid) throw new UnauthorizedException('Invalid credentials');
 
+        // TODO: Implement a refresh-token flow so that the short-lived access
+        //       token (15 m) can be renewed without re-entering credentials.
+        //       Store refresh tokens in Redis with a TTL of 7 days and rotate
+        //       them on every use to detect token theft.
         const token = this.generateToken(user.id, user.email, user.role);
         return { user: { id: user.id, name: user.name, email: user.email, role: user.role }, ...token };
     }
