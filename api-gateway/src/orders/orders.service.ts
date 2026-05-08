@@ -10,6 +10,7 @@ import { Product } from '../entities/product.entity';
 import { Inventory } from '../entities/inventory.entity';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { OrdersGateway } from '../websockets/orders.gateway';
+import { OrderConfirmationJob } from '../jobs/order-confirmation.job';
 
 @Injectable()
 export class OrdersService {
@@ -29,6 +30,7 @@ export class OrdersService {
 
   async create(userId: number, dto: CreateOrderDto): Promise<Order> {
     let savedOrderId = 0;
+    const orderItemsForEmail: any[] = [];
 
     await this.dataSource.transaction(async (manager) => {
       let total = 0;
@@ -62,17 +64,24 @@ export class OrdersService {
 
         orderItems.push({
           product_id: item.product_id,
-          quantity: item.quantity,
+          quantity:   item.quantity,
           unit_price: Number(product.price),
+          subtotal,
+        });
+
+        orderItemsForEmail.push({
+          productName: product.name,
+          quantity:    item.quantity,
+          unitPrice:   Number(product.price),
           subtotal,
         });
       }
 
       const order = manager.create(Order, {
-        user_id: userId,
+        user_id:      userId,
         total_amount: total,
-        notes: dto.notes,
-        status: OrderStatus.PENDING,
+        notes:        dto.notes,
+        status:       OrderStatus.PENDING,
       });
       const savedOrder = await manager.save(Order, order);
       savedOrderId = savedOrder.id;
@@ -85,10 +94,21 @@ export class OrdersService {
       }
     });
 
+    // Mock payment
     console.log(`[Payment] Processing payment for order #${savedOrderId} - SUCCESS`);
     await this.orderRepository.update(savedOrderId, { status: OrderStatus.CONFIRMED });
 
     const order = await this.findOne(savedOrderId);
+
+    // Queue email job (async — non-blocking)
+    const user = order.user as any;
+    OrderConfirmationJob.process({
+      orderId:     order.id,
+      userEmail:   user?.email ?? 'customer@example.com',
+      userName:    user?.name  ?? 'Customer',
+      totalAmount: Number(order.total_amount),
+      items:       orderItemsForEmail,
+    }).catch(err => console.error('[EmailQueue] Failed:', err.message));
 
     // WebSocket notification
     this.ordersGateway.notifyOrderUpdate(userId, order);
@@ -112,18 +132,18 @@ export class OrdersService {
 
   async findUserOrders(userId: number) {
     return this.orderRepository.find({
-      where: { user_id: userId },
+      where:     { user_id: userId },
       relations: ['items', 'items.product'],
-      order: { created_at: 'DESC' },
+      order:     { created_at: 'DESC' },
     });
   }
 
   async findAll(page = 1, limit = 10) {
     const [data, total] = await this.orderRepository.findAndCount({
       relations: ['items', 'user'],
-      order: { created_at: 'DESC' },
-      skip: (page - 1) * limit,
-      take: limit,
+      order:     { created_at: 'DESC' },
+      skip:      (page - 1) * limit,
+      take:      limit,
     });
 
     return {
@@ -159,7 +179,6 @@ export class OrdersService {
     await this.orderRepository.update(id, { status });
     const updated = await this.findOne(id);
 
-    // WebSocket notification
     this.ordersGateway.notifyOrderUpdate(updated.user_id, updated);
 
     return updated;
