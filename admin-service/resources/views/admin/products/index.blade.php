@@ -5,7 +5,8 @@
     <h1 class="text-2xl font-bold">Products</h1>
     <a href="{{ route('admin.products.create') }}"
        class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
-        + New Product
+        + New Product</a>
+        <a href="{{ route('admin.products.import') }}" class="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700">Import CSV
     </a>
 </div>
 
