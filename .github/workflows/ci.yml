@@ -111,15 +111,6 @@ jobs:
           cp .env.example .env
           php artisan key:generate
 
-      - name: Run migrations
-        working-directory: admin-service
-        env:
-          DB_HOST: 127.0.0.1
-          DB_PORT: 5432
-          DB_DATABASE: ecommerce
-          DB_USERNAME: ecommerce_user
-          DB_PASSWORD: secret
-        run: php artisan migrate --force
 
       - name: Run tests
         working-directory: admin-service
