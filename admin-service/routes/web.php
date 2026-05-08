@@ -22,6 +22,7 @@ Route::prefix('admin')
         Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
         // Products
+        Route::get('products/export', [ProductController::class, 'export'])->name('products.export');
         Route::resource('products', ProductController::class);
         Route::post('products/{product}/restore', [ProductController::class, 'restore'])
             ->name('products.restore');

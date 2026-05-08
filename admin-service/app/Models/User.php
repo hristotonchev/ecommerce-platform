@@ -2,16 +2,12 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use Illuminate\Database\Eloquent\SoftDeletes;
 
 class User extends Authenticatable
 {
-    use HasFactory, Notifiable, SoftDeletes;
-
-    const UPDATED_AT = null; // няма updated_at колона
+    use Notifiable;
 
     protected $fillable = [
         'name',
@@ -29,13 +25,7 @@ class User extends Authenticatable
     {
         return [
             'email_verified_at' => 'datetime',
-            'password' => 'hashed',
-            'deleted_at' => 'datetime',
+            'password'          => 'hashed',
         ];
-    }
-
-    public function isAdmin(): bool
-    {
-        return $this->role === 'admin';
     }
 }

@@ -8,6 +8,10 @@
         + New Product</a>
         <a href="{{ route('admin.products.import') }}" class="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700">Import CSV
     </a>
+    <a href="{{ route('admin.products.export') }}"
+       class="bg-yellow-600 text-white px-4 py-2 rounded hover:bg-yellow-700">
+        Export CSV
+    </a>
 </div>
 
 <form method="GET" class="mb-4">

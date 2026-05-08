@@ -147,4 +147,42 @@ class ProductController extends Controller
             \Log::warning('Nest.js notification failed: ' . $e->getMessage());
         }
     }
+
+    public function export()
+    {
+        $products = DB::table('products as p')
+            ->leftJoin('categories as c', 'p.category_id', '=', 'c.id')
+            ->leftJoin('inventory as i', 'p.id', '=', 'i.product_id')
+            ->select('p.id', 'p.name', 'p.description', 'p.price',
+                     'c.name as category', 'i.quantity', 'p.is_active', 'p.created_at')
+            ->whereNull('p.deleted_at')
+            ->orderBy('p.id')
+            ->get();
+
+        $filename = 'products-export-' . now()->format('Y-m-d') . '.csv';
+        $headers  = [
+            'Content-Type'        => 'text/csv',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+        ];
+
+        $callback = function() use ($products) {
+            $file = fopen('php://output', 'w');
+            fputcsv($file, ['ID', 'Name', 'Description', 'Price', 'Category', 'Quantity', 'Active', 'Created At']);
+            foreach ($products as $p) {
+                fputcsv($file, [
+                    $p->id,
+                    $p->name,
+                    $p->description,
+                    $p->price,
+                    $p->category ?? 'N/A',
+                    $p->quantity ?? 0,
+                    $p->is_active ? 'Yes' : 'No',
+                    $p->created_at,
+                ]);
+            }
+            fclose($file);
+        };
+
+        return response()->stream($callback, 200, $headers);
+    }
 }
